@@ -3,13 +3,11 @@ const chrome = require('selenium-webdriver/chrome');
 const axios = require('axios');
 const express = require('express');
 const { Client } = require('discord.js-selfbot-v13');
-const fs = require('fs');
-const path = require('path');
 
 // Configuration - Railway deployment ready
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const USERNAME_WEBHOOK_URL = process.env.USERNAME_WEBHOOK_URL;
-const ITEM_IDS = process.env.ITEM_IDS || '1744060292,215718515,1125510,1285307,96103379,33070696,2566024668,1235488,527365852,1180419690,26019070,101191388,26343188,527365852,24114402,24112667,250654457,51346471,193696364,46348897,439945661,77443491,1029025,4390891467,439945864,39247498,553971558'; // Comma-separated item IDs
+const ITEM_IDS = process.env.ITEM_IDS || '1125510,1285307,96103379,33070696,2566024668,1235488,527365852,1180419690,26019070,101191388,26343188,527365852,24114402,24112667,250654457,51346471,193696364,46348897,439945661,77443491,1029025,4390891467,439945864,39247498,553971558'; // Comma-separated item IDs
 const NEXUS_ADMIN_KEY = process.env.NEXUS_ADMIN_KEY;
 const NEXUS_API_URL = 'https://discord.nexusdevtools.com/lookup/roblox';
 
@@ -84,7 +82,9 @@ if (USER_TOKEN) {
                 if (count === 0) {
                     await message.reply('❌ No Discord usernames found in channel history.');
                 } else {
-                    await message.reply(`✅ Found **${count}** unique Discord username(s) in channel history.\n\n**List:**\n\`\`\`\n${usernames.join('\n')}\n\`\`\``);
+                    // Discord message content limit is 2000 chars. Sending 300+ usernames in one message
+                    // easily exceeds that. Only send the count; use !makefiletotal for the full list.
+                    await message.reply(`✅ Found **${count}** unique Discord username(s) in channel history.\n\nUse \`!makefiletotal\` to export the full list to a file.`);
                 }
             } catch (error) {
                 console.error('❌ Error processing !total:', error.message);
@@ -127,7 +127,8 @@ if (USER_TOKEN) {
                 if (count === 0) {
                     await message.reply('❌ No Discord usernames found between the specified messages.');
                 } else {
-                    await message.reply(`✅ Found **${count}** unique Discord username(s) between messages.\n\n**List:**\n\`\`\`\n${usernames.join('\n')}\n\`\`\``);
+                    // Avoid 2000-char limit: only send count; use !makefile for the full list.
+                    await message.reply(`✅ Found **${count}** unique Discord username(s) between messages.\n\nUse \`!makefile ${startUsername} to ${endUsername}\` to export the full list to a file.`);
                 }
             } catch (error) {
                 console.error('❌ Error processing !totalfrom:', error.message);
@@ -150,12 +151,13 @@ if (USER_TOKEN) {
                 }
                 
                 const filename = `discord_usernames_total_${Date.now()}.txt`;
-                const filepath = path.join(__dirname, filename);
                 const content = usernames.join('\n');
                 
-                fs.writeFileSync(filepath, content, 'utf8');
-                
-                await message.reply(`✅ Created file: **${filename}**\n📊 Contains **${count}** Discord username(s).`);
+                // Reply to the user who ran the command with the .txt file attached (no server disk write)
+                await message.reply({
+                    content: `✅ **${filename}**\n📊 Contains **${count}** Discord username(s).\n📎 File attached below.`,
+                    files: [{ attachment: Buffer.from(content, 'utf8'), name: filename }]
+                });
             } catch (error) {
                 console.error('❌ Error processing !makefiletotal:', error.message);
                 await message.reply(`❌ Error: ${error.message}`);
@@ -200,12 +202,13 @@ if (USER_TOKEN) {
                 }
                 
                 const filename = `discord_usernames_${startUsername}_to_${endUsername}_${Date.now()}.txt`;
-                const filepath = path.join(__dirname, filename);
                 const content = usernames.join('\n');
                 
-                fs.writeFileSync(filepath, content, 'utf8');
-                
-                await message.reply(`✅ Created file: **${filename}**\n📊 Contains **${count}** Discord username(s).`);
+                // Reply to the user who ran the command with the .txt file attached (no server disk write)
+                await message.reply({
+                    content: `✅ **${filename}**\n📊 Contains **${count}** Discord username(s).\n📎 File attached below.`,
+                    files: [{ attachment: Buffer.from(content, 'utf8'), name: filename }]
+                });
             } catch (error) {
                 console.error('❌ Error processing !makefile:', error.message);
                 await message.reply(`❌ Error: ${error.message}`);
