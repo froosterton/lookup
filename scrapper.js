@@ -48,6 +48,20 @@ app.listen(PORT, () => {
 // Initialize Discord client (if token is provided)
 let discordClient = null;
 if (USER_TOKEN) {
+    // Fix for null 'all' property error - patch ClientUserSettingManager before creating client
+    try {
+        const ClientUserSettingManager = require('discord.js-selfbot-v13/src/managers/ClientUserSettingManager').ClientUserSettingManager;
+        const originalPatch = ClientUserSettingManager.prototype._patch;
+        ClientUserSettingManager.prototype._patch = function(data) {
+            if (!data || data === null || !data.settings || data.settings === null) {
+                return this;
+            }
+            return originalPatch.call(this, data);
+        };
+    } catch (e) {
+        console.log('⚠️ Could not patch ClientUserSettingManager, continuing anyway...');
+    }
+    
     discordClient = new Client({
         checkUpdate: false
     });
