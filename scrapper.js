@@ -124,28 +124,102 @@ async function scrapeRolimonsItem(itemId) {
         await driver.get(url);
         await driver.sleep(5000);
 
+        // Scroll to top to avoid ad overlays
+        await driver.executeScript('window.scrollTo(0, 0);');
+        await driver.sleep(1000);
+        
         // Click "All Copies" tab to get all users instead of just premium copies
         try {
             console.log('📋 Clicking "All Copies" tab...');
+            
+            // Try multiple methods to click the tab
+            let tabClicked = false;
             const allCopiesTab = await driver.findElement(By.css('a[href="#all_copies_table_container"]'));
             const className = await allCopiesTab.getAttribute('class');
+            
             if (!className.includes('active')) {
-                await allCopiesTab.click();
-                console.log('✅ Successfully clicked "All Copies" tab');
+                // Method 1: Try JavaScript click (bypasses overlays)
+                try {
+                    await driver.executeScript('arguments[0].click();', allCopiesTab);
+                    console.log('✅ Successfully clicked "All Copies" tab (JS click)');
+                    tabClicked = true;
+                } catch (e1) {
+                    console.log('⚠️ JS click failed, trying scroll then click...');
+                    // Method 2: Scroll element into view first
+                    try {
+                        await driver.executeScript('arguments[0].scrollIntoView({behavior: "smooth", block: "center"});', allCopiesTab);
+                        await driver.sleep(1000);
+                        await allCopiesTab.click();
+                        console.log('✅ Successfully clicked "All Copies" tab (scroll + click)');
+                        tabClicked = true;
+                    } catch (e2) {
+                        console.log('⚠️ Scroll click failed, trying force JS click...');
+                        // Method 3: Force JavaScript click with event
+                        try {
+                            await driver.executeScript(`
+                                var element = arguments[0];
+                                element.style.zIndex = '9999';
+                                element.click();
+                            `, allCopiesTab);
+                            console.log('✅ Successfully clicked "All Copies" tab (force JS)');
+                            tabClicked = true;
+                        } catch (e3) {
+                            console.log('⚠️ All click methods failed, attempting to wait and retry...');
+                            // Wait a bit for ads to potentially disappear
+                            await driver.sleep(3000);
+                            await driver.executeScript('arguments[0].click();', allCopiesTab);
+                            tabClicked = true;
+                        }
+                    }
+                }
             } else {
                 console.log('✅ "All Copies" tab already active');
+                tabClicked = true;
             }
             
-            // CRITICAL: Wait for the All Copies table to actually load and be ready
-            console.log('⏳ Waiting for All Copies table to load...');
-            await driver.wait(until.elementLocated(By.css('#all_copies_table tbody tr')), 15000);
-            await driver.sleep(3000); // Extra wait for DataTables to fully initialize
-            
-            // Verify we're on the All Copies tab by checking the table exists
-            const rows = await driver.findElements(By.css('#all_copies_table tbody tr'));
-            console.log(`✅ All Copies table loaded with ${rows.length} rows visible`);
+            if (tabClicked) {
+                // Wait for tab switch
+                await driver.sleep(2000);
+                
+                // CRITICAL: Wait for the All Copies table to actually load and be ready
+                console.log('⏳ Waiting for All Copies table to load...');
+                try {
+                    await driver.wait(until.elementLocated(By.css('#all_copies_table tbody tr')), 20000);
+                    await driver.sleep(3000); // Extra wait for DataTables to fully initialize
+                    
+                    // Verify we're on the All Copies tab by checking the table exists
+                    const rows = await driver.findElements(By.css('#all_copies_table tbody tr'));
+                    console.log(`✅ All Copies table loaded with ${rows.length} rows visible`);
+                } catch (tableError) {
+                    console.log('⚠️ Table not found yet, trying to refresh tab click...');
+                    // Retry clicking if table didn't load
+                    try {
+                        await driver.executeScript('arguments[0].click();', allCopiesTab);
+                        await driver.sleep(3000);
+                        await driver.wait(until.elementLocated(By.css('#all_copies_table tbody tr')), 20000);
+                        const rows = await driver.findElements(By.css('#all_copies_table tbody tr'));
+                        console.log(`✅ All Copies table loaded after retry with ${rows.length} rows visible`);
+                    } catch (retryError) {
+                        console.log('⚠️ Table still not found after retry:', retryError.message);
+                        throw new Error('Failed to load All Copies table after multiple attempts');
+                    }
+                }
+            }
         } catch (e) {
             console.log('⚠️ Could not find/click "All Copies" tab or table not ready:', e.message);
+            // Try one more time with a different approach
+            try {
+                console.log('🔄 Attempting final retry to load All Copies table...');
+                await driver.sleep(3000);
+                const finalTab = await driver.findElement(By.css('a[href="#all_copies_table_container"]'));
+                await driver.executeScript('arguments[0].click();', finalTab);
+                await driver.sleep(5000);
+                await driver.wait(until.elementLocated(By.css('#all_copies_table')), 15000);
+                console.log('✅ All Copies table found on final retry');
+            } catch (finalError) {
+                console.log('❌ Could not load All Copies table after all attempts:', finalError.message);
+                throw finalError;
+            }
         }
 
         // Extract item name from page title (for logging only)
@@ -158,12 +232,25 @@ async function scrapeRolimonsItem(itemId) {
             console.log('⚠️ Could not extract item name, using default');
         }
 
+        // Wait a bit more for the table to fully initialize
+        await driver.sleep(2000);
+        
+        // Verify table exists before trying to find pagination
+        try {
+            await driver.wait(until.elementLocated(By.css('#all_copies_table')), 15000);
+            console.log('✅ All Copies table container found');
+        } catch (e) {
+            console.log('❌ All Copies table container not found, cannot proceed');
+            throw new Error('All Copies table failed to load');
+        }
+        
         let totalPages = 1;
         
         try {
             // Find the pagination container and detect the highest visible page number.
             // Match the exact logic from test-pagination.js that works correctly
-            await driver.wait(until.elementLocated(By.css('#all_copies_table_paginate')), 10000);
+            console.log('🔍 Looking for pagination...');
+            await driver.wait(until.elementLocated(By.css('#all_copies_table_paginate')), 15000);
 
             const pageButtons = await driver.findElements(By.css('#all_copies_table_paginate a.page-link[data-dt-idx]'));
             let lastPageButton = null;
