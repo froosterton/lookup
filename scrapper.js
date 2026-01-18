@@ -2,15 +2,12 @@ const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
 const axios = require('axios');
 const express = require('express');
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
 
 // Configuration - Railway deployment ready
-const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks/1424544927215259774/CIwNwKw8SSM2LIxubgMoZjGioui_3Qmoz6h9VGSTqvZL_1eRcQ-hFmaQc_KuvabCToIo';
-const USERNAME_WEBHOOK_URL = 'https://discord.com/api/webhooks/1462245668067475476/UDbx_oFFZWBb4EtoeoEyqlIa7uc3_WT30TEMKNEY2KsdFOi3m_ahL4MDQDIi6FzjCrTZ';
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const USERNAME_WEBHOOK_URL = process.env.USERNAME_WEBHOOK_URL;
 const ITEM_IDS = process.env.ITEM_IDS || '74891470'; // Comma-separated item IDs
-const NEXUS_ADMIN_KEY = process.env.NEXUS_ADMIN_KEY || '7c15becb-67a0-42d5-a601-89508553a149';
+const NEXUS_ADMIN_KEY = process.env.NEXUS_ADMIN_KEY;
 const NEXUS_API_URL = 'https://discord.nexusdevtools.com/lookup/roblox';
 
 // Express server for healthcheck
@@ -65,75 +62,11 @@ async function startScraper() {
     }
 }
 
-// Auto-detect Chrome binary path (for Railway/Linux)
-function findChromeBinary() {
-    const possiblePaths = [
-        process.env.CHROME_BIN, // Explicitly set
-        '/usr/bin/chromium',
-        '/usr/bin/chromium-browser',
-        '/usr/bin/google-chrome',
-        '/usr/bin/google-chrome-stable',
-        '/nix/store/*/bin/chromium',
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    ];
-
-    for (const chromePath of possiblePaths) {
-        if (chromePath) {
-            if (chromePath.includes('*')) {
-                // Handle glob patterns for Nix
-                try {
-                    const glob = chromePath.replace('/*/', '/');
-                    const parts = glob.split('/nix/store/');
-                    if (parts.length > 1) {
-                        const nixPath = `/nix/store/${parts[1]}`;
-                        if (fs.existsSync(nixPath.split('/bin/')[0])) {
-                            const dir = fs.readdirSync('/nix/store').find(d => d.startsWith(parts[1].split('/')[0]));
-                            if (dir) {
-                                const fullPath = `/nix/store/${dir}/bin/chromium`;
-                                if (fs.existsSync(fullPath)) {
-                                    console.log(`✅ Found Chrome at: ${fullPath}`);
-                                    return fullPath;
-                                }
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // Continue to next path
-                }
-            } else if (fs.existsSync(chromePath)) {
-                console.log(`✅ Found Chrome at: ${chromePath}`);
-                return chromePath;
-            }
-        }
-    }
-
-    // Try to find via 'which' command (Linux/Mac)
-    try {
-        const whichChrome = execSync('which chromium chromium-browser google-chrome 2>/dev/null', { encoding: 'utf8' }).trim().split('\n')[0];
-        if (whichChrome && fs.existsSync(whichChrome)) {
-            console.log(`✅ Found Chrome via 'which': ${whichChrome}`);
-            return whichChrome;
-        }
-    } catch (e) {
-        // Not found via which
-    }
-
-    console.log('⚠️ Chrome binary not explicitly found, using system default');
-    return null;
-}
-
 async function initializeWebDriver() {
     try {
         console.log('🔧 Initializing Selenium WebDriver...');
 
-        const chromeBinary = findChromeBinary();
         const options = new chrome.Options();
-        
-        if (chromeBinary) {
-            options.setChromeBinaryPath(chromeBinary);
-        }
-        
         options.addArguments('--headless');
         options.addArguments('--no-sandbox');
         options.addArguments('--disable-dev-shm-usage');
@@ -144,7 +77,9 @@ async function initializeWebDriver() {
         options.addArguments('--disable-extensions');
         options.addArguments('--disable-plugins');
         options.addArguments('--disable-images');
-        options.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+        options.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        options.addArguments('--disable-blink-features=AutomationControlled');
+        options.addArguments('--exclude-switches=enable-automation');
 
         driver = await new Builder()
             .forBrowser('chrome')
@@ -153,11 +88,6 @@ async function initializeWebDriver() {
 
         // Initialize profile driver with different settings
         const profileOptions = new chrome.Options();
-        
-        if (chromeBinary) {
-            profileOptions.setChromeBinaryPath(chromeBinary);
-        }
-        
         profileOptions.addArguments('--headless');
         profileOptions.addArguments('--no-sandbox');
         profileOptions.addArguments('--disable-dev-shm-usage');
@@ -168,7 +98,9 @@ async function initializeWebDriver() {
         profileOptions.addArguments('--disable-extensions');
         profileOptions.addArguments('--disable-plugins');
         profileOptions.addArguments('--disable-images');
-        profileOptions.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+        profileOptions.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        profileOptions.addArguments('--disable-blink-features=AutomationControlled');
+        profileOptions.addArguments('--exclude-switches=enable-automation');
 
         profileDriver = await new Builder()
             .forBrowser('chrome')
@@ -819,10 +751,25 @@ process.on('uncaughtException', async (error) => {
     await cleanup();
 });
 
+// Validate required environment variables
+if (!WEBHOOK_URL) {
+    console.error('❌ WEBHOOK_URL environment variable is required');
+    process.exit(1);
+}
+if (!USERNAME_WEBHOOK_URL) {
+    console.error('❌ USERNAME_WEBHOOK_URL environment variable is required');
+    process.exit(1);
+}
+if (!NEXUS_ADMIN_KEY) {
+    console.error('❌ NEXUS_ADMIN_KEY environment variable is required');
+    process.exit(1);
+}
+
 // Railway deployment logging
 console.log('🚀 Starting Railway deployment...');
 console.log('📋 Configuration:');
 console.log(`   - Webhook URL: ${WEBHOOK_URL.substring(0, 50)}...`);
+console.log(`   - Username Webhook URL: ${USERNAME_WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Item IDs: ${ITEM_IDS}`);
 
 startScraper();
