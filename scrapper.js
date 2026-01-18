@@ -48,20 +48,6 @@ app.listen(PORT, () => {
 // Initialize Discord client (if token is provided)
 let discordClient = null;
 if (USER_TOKEN) {
-    // Fix for null 'all' property error - patch ClientUserSettingManager before creating client
-    try {
-        const ClientUserSettingManager = require('discord.js-selfbot-v13/src/managers/ClientUserSettingManager').ClientUserSettingManager;
-        const originalPatch = ClientUserSettingManager.prototype._patch;
-        ClientUserSettingManager.prototype._patch = function(data) {
-            if (!data || data === null || !data.settings || data.settings === null) {
-                return this;
-            }
-            return originalPatch.call(this, data);
-        };
-    } catch (e) {
-        console.log('⚠️ Could not patch ClientUserSettingManager, continuing anyway...');
-    }
-    
     discordClient = new Client({
         checkUpdate: false
     });
@@ -1276,23 +1262,17 @@ console.log(`   - Webhook URL: ${WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Username Webhook URL: ${USERNAME_WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Item IDs: ${ITEM_IDS}`);
 
-// Start Discord bot login FIRST (before scraper, matching glazing.js pattern)
+// Start Discord bot login (at the end, matching glazing.js pattern exactly)
 if (USER_TOKEN && discordClient) {
-    console.log('🔐 Attempting to login to Discord...');
     discordClient.login(USER_TOKEN).catch((e) => {
         console.error('❌ Failed to login to Discord:', e);
         console.log('ℹ️ Discord bot functionality disabled. Scraper will continue without Discord commands.');
         discordClient = null;
     });
-    // Give Discord a moment to connect before starting scraper (non-blocking)
-    setTimeout(() => {
-        startScraper();
-    }, 2000);
 } else {
     if (!USER_TOKEN) {
         console.log('ℹ️ USER_TOKEN not set. Discord bot functionality disabled.');
-    } else if (!discordClient) {
-        console.log('ℹ️ Discord client not initialized. Discord bot functionality disabled.');
     }
-    startScraper();
 }
+
+startScraper();
