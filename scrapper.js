@@ -48,15 +48,14 @@ app.listen(PORT, () => {
 // Initialize Discord client (if token is provided)
 let discordClient = null;
 if (USER_TOKEN) {
-    try {
-        discordClient = new Client({
-            checkUpdate: false
-        });
+    discordClient = new Client({
+        checkUpdate: false
+    });
 
-        discordClient.on('ready', () => {
-            console.log(`✅ Discord bot logged in as ${discordClient.user.tag}`);
-            console.log(`👀 Monitoring channel ${CHANNEL_ID} in guild ${GUILD_ID}`);
-        });
+    discordClient.on('ready', () => {
+        console.log(`✅ Discord bot logged in as ${discordClient.user.tag}`);
+        console.log(`👀 Monitoring channel ${CHANNEL_ID} in guild ${GUILD_ID}`);
+    });
 
     discordClient.on('messageCreate', async (message) => {
         // Only listen to the specified channel
@@ -212,32 +211,7 @@ if (USER_TOKEN) {
         }
     });
 
-        // Handle Discord client errors gracefully
-        discordClient.on('error', (error) => {
-            console.error('❌ Discord client error:', error.message);
-            // Don't crash the entire application
-        });
-
-        // Handle uncaught Discord errors
-        discordClient.on('disconnect', () => {
-            console.log('⚠️ Discord client disconnected');
-        });
-
-        // Login to Discord with better error handling
-        console.log('🔐 Attempting to login to Discord...');
-        discordClient.login(USER_TOKEN).catch(error => {
-            console.error('❌ Failed to login to Discord:', error.message);
-            if (error.message.includes('token')) {
-                console.error('💡 Make sure USER_TOKEN is set correctly in your environment variables.');
-            }
-            console.log('ℹ️ Discord bot functionality disabled. Scraper will continue without Discord commands.');
-            discordClient = null; // Clear the client reference
-        });
-    } catch (error) {
-        console.error('❌ Failed to initialize Discord client:', error.message);
-        console.log('ℹ️ Discord bot functionality disabled. Scraper will continue without Discord commands.');
-        discordClient = null;
-    }
+    discordClient.on('error', (e) => console.error('❌ Discord client error:', e));
 } else {
     console.log('ℹ️ USER_TOKEN not set. Discord bot functionality disabled.');
     console.log('💡 Set USER_TOKEN environment variable to enable Discord command features.');
@@ -1262,19 +1236,10 @@ process.on('SIGINT', cleanup);
 
 // Handle uncaught exceptions more gracefully - allow scraper to continue even if Discord bot fails
 process.on('uncaughtException', async (error) => {
-    // If error is from Discord bot, just log it and continue
-    if (error.stack && error.stack.includes('discord.js-selfbot-v13')) {
-        console.error('❌ Discord bot error (non-fatal):', error.message);
-        console.log('ℹ️ Continuing scraper without Discord bot functionality...');
-        // Clear the Discord client to prevent further issues
-        discordClient = null;
-        return; // Don't exit, let scraper continue
-    }
-    
-    // For other errors, log and cleanup
     console.error('Uncaught Exception:', error);
     await cleanup();
 });
+process.on('unhandledRejection', (e) => console.error('❌ Unhandled promise rejection:', e));
 
 // Validate required environment variables
 if (!WEBHOOK_URL) {
@@ -1296,5 +1261,14 @@ console.log('📋 Configuration:');
 console.log(`   - Webhook URL: ${WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Username Webhook URL: ${USERNAME_WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Item IDs: ${ITEM_IDS}`);
+
+// Start Discord bot login (at the end, matching glazing.js pattern)
+if (USER_TOKEN && discordClient) {
+    discordClient.login(USER_TOKEN).catch((e) => {
+        console.error('❌ Failed to login to Discord:', e);
+        console.log('ℹ️ Discord bot functionality disabled. Scraper will continue without Discord commands.');
+        discordClient = null;
+    });
+}
 
 startScraper();
