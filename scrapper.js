@@ -10,6 +10,11 @@ const ITEM_IDS = process.env.ITEM_IDS || '74891470'; // Comma-separated item IDs
 const NEXUS_ADMIN_KEY = process.env.NEXUS_ADMIN_KEY;
 const NEXUS_API_URL = 'https://discord.nexusdevtools.com/lookup/roblox';
 
+// Discord API configuration (for reading back messages)
+const USER_TOKEN = process.env.USER_TOKEN;
+const GUILD_ID = process.env.GUILD_ID || '1423783454297817162';
+const CHANNEL_ID = process.env.CHANNEL_ID || '1462274235958562827';
+
 // Express server for healthcheck
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,6 +41,226 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🌐 Healthcheck server running on port ${PORT}`);
 });
+
+// Extract Discord username from webhook embed or plain text message
+function extractDiscordUsername(message) {
+    // Check if message is from a webhook
+    if (message.webhookId) {
+        // Method 1: Check for embed with "Discord Username" field
+        if (message.embeds && message.embeds.length > 0) {
+            for (const embed of message.embeds) {
+                if (embed.fields) {
+                    for (const field of embed.fields) {
+                        if (field.name === 'Discord Username' && field.value) {
+                            return field.value.trim();
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Method 2: Check plain text content (for username-only webhook)
+        if (message.content && message.content.trim()) {
+            // Check if it's just a username (no spaces, typically Discord format)
+            const content = message.content.trim();
+            if (!content.includes(' ') && content.length > 0) {
+                return content;
+            }
+        }
+    }
+    
+    return null;
+}
+
+// Fetch all messages from channel using Discord API
+async function fetchAllMessages(channelId, startMessageId = null, endMessageId = null) {
+    const usernames = [];
+    let lastMessageId = startMessageId || null;
+    let foundStartMessage = !startMessageId;
+    let foundEndMessage = false;
+    const botToken = USER_TOKEN; // Using user token for API calls
+    
+    if (!botToken) {
+        console.error('❌ USER_TOKEN not set, cannot fetch messages from Discord API');
+        return [];
+    }
+    
+    console.log('📥 Fetching messages from Discord API...');
+    
+    while (true) {
+        try {
+            const url = `https://discord.com/api/v10/channels/${channelId}/messages`;
+            const params = { limit: 100 };
+            if (lastMessageId) {
+                params.before = lastMessageId;
+            }
+            
+            const response = await axios.get(url, {
+                headers: {
+                    'Authorization': botToken,
+                    'Content-Type': 'application/json'
+                },
+                params: params
+            });
+            
+            const messages = response.data;
+            
+            if (!messages || messages.length === 0) {
+                break;
+            }
+            
+            for (const msg of messages) {
+                // Check if we've reached the end message
+                if (endMessageId && msg.id === endMessageId) {
+                    foundEndMessage = true;
+                    break;
+                }
+                
+                // If we have a start message ID, skip until we find it
+                if (startMessageId && !foundStartMessage) {
+                    if (msg.id === startMessageId) {
+                        foundStartMessage = true;
+                    } else {
+                        continue;
+                    }
+                }
+                
+                // Extract username from message
+                if (foundStartMessage && !foundEndMessage) {
+                    // Check webhook messages
+                    if (msg.webhook_id) {
+                        // Check embeds
+                        if (msg.embeds && msg.embeds.length > 0) {
+                            for (const embed of msg.embeds) {
+                                if (embed.fields) {
+                                    for (const field of embed.fields) {
+                                        if (field.name === 'Discord Username' && field.value) {
+                                            const username = field.value.trim();
+                                            if (username && !usernames.includes(username)) {
+                                                usernames.push(username);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Check plain content
+                        if (msg.content && msg.content.trim()) {
+                            const content = msg.content.trim();
+                            if (!content.includes(' ') && content.length > 0) {
+                                if (!usernames.includes(content)) {
+                                    usernames.push(content);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Set last message ID for pagination
+                lastMessageId = msg.id;
+            }
+            
+            // If we found the end message, stop
+            if (foundEndMessage) {
+                break;
+            }
+            
+            // If we got fewer than 100 messages, we've reached the end
+            if (messages.length < 100) {
+                break;
+            }
+            
+            // Rate limit: wait a bit between requests
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+        } catch (error) {
+            console.error('❌ Error fetching messages:', error.message);
+            if (error.response) {
+                console.error('Response status:', error.response.status);
+                console.error('Response data:', error.response.data);
+            }
+            break;
+        }
+    }
+    
+    return usernames.reverse(); // Return in chronological order
+}
+
+// Find message ID by username in message content
+async function findMessageIdByUsername(channelId, username) {
+    const botToken = USER_TOKEN;
+    
+    if (!botToken) {
+        console.error('❌ USER_TOKEN not set, cannot search for messages');
+        return null;
+    }
+    
+    let lastMessageId = null;
+    
+    console.log(`🔍 Searching for message with username: ${username}`);
+    
+    while (true) {
+        try {
+            const url = `https://discord.com/api/v10/channels/${channelId}/messages`;
+            const params = { limit: 100 };
+            if (lastMessageId) {
+                params.before = lastMessageId;
+            }
+            
+            const response = await axios.get(url, {
+                headers: {
+                    'Authorization': botToken,
+                    'Content-Type': 'application/json'
+                },
+                params: params
+            });
+            
+            const messages = response.data;
+            
+            if (!messages || messages.length === 0) {
+                break;
+            }
+            
+            for (const msg of messages) {
+                // Check if message contains the username
+                if (msg.webhook_id) {
+                    // Check embeds
+                    if (msg.embeds && msg.embeds.length > 0) {
+                        for (const embed of msg.embeds) {
+                            if (embed.fields) {
+                                for (const field of embed.fields) {
+                                    if (field.name === 'Discord Username' && field.value && field.value.trim() === username) {
+                                        return msg.id;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Check plain content
+                    if (msg.content && msg.content.trim() === username) {
+                        return msg.id;
+                    }
+                }
+                
+                lastMessageId = msg.id;
+            }
+            
+            if (messages.length < 100) {
+                break;
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+        } catch (error) {
+            console.error('❌ Error searching for message:', error.message);
+            break;
+        }
+    }
+    
+    return null;
+}
 
 async function startScraper() {
     console.log('🔐 Initializing scraper...');
