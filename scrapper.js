@@ -16,7 +16,8 @@ const NEXUS_API_URL = 'https://discord.nexusdevtools.com/lookup/roblox';
 // Discord API configuration (for reading back messages)
 const USER_TOKEN = process.env.USER_TOKEN;
 const GUILD_ID = process.env.GUILD_ID || '1423783454297817162';
-const CHANNEL_ID = process.env.CHANNEL_ID || '1462274235958562827';
+const COMMAND_CHANNEL_ID = process.env.COMMAND_CHANNEL_ID || '1462274235958562827'; // Channel where commands are sent
+const MONITOR_CHANNEL_ID = process.env.MONITOR_CHANNEL_ID || '1462245649834577952'; // Channel where webhook messages with usernames are sent
 
 // Express server for healthcheck
 const app = express();
@@ -54,12 +55,13 @@ if (USER_TOKEN) {
 
     discordClient.on('ready', () => {
         console.log(`✅ Discord bot logged in as ${discordClient.user.tag}`);
-        console.log(`👀 Monitoring channel ${CHANNEL_ID} in guild ${GUILD_ID}`);
+        console.log(`👀 Accepting commands from channel ${COMMAND_CHANNEL_ID}`);
+        console.log(`📥 Reading usernames from channel ${MONITOR_CHANNEL_ID}`);
     });
 
     discordClient.on('messageCreate', async (message) => {
-        // Only listen to the specified channel
-        if (message.channel.id !== CHANNEL_ID) {
+        // Only listen to commands from the command channel
+        if (message.channel.id !== COMMAND_CHANNEL_ID) {
             return;
         }
         
@@ -76,7 +78,7 @@ if (USER_TOKEN) {
             await message.reply('🔄 Fetching all usernames from channel history... This may take a moment.');
             
             try {
-                const usernames = await fetchAllMessages(CHANNEL_ID);
+                const usernames = await fetchAllMessages(MONITOR_CHANNEL_ID);
                 const count = usernames.length;
                 
                 if (count === 0) {
@@ -106,8 +108,8 @@ if (USER_TOKEN) {
             await message.reply(`🔄 Searching for messages between "${startUsername}" and "${endUsername}"...`);
             
             try {
-                const startMessageId = await findMessageIdByUsername(CHANNEL_ID, startUsername);
-                const endMessageId = await findMessageIdByUsername(CHANNEL_ID, endUsername);
+                const startMessageId = await findMessageIdByUsername(MONITOR_CHANNEL_ID, startUsername);
+                const endMessageId = await findMessageIdByUsername(MONITOR_CHANNEL_ID, endUsername);
                 
                 if (!startMessageId) {
                     await message.reply(`❌ Could not find message with username: ${startUsername}`);
@@ -119,7 +121,7 @@ if (USER_TOKEN) {
                     return;
                 }
                 
-                const usernames = await fetchAllMessages(CHANNEL_ID, startMessageId, endMessageId);
+                const usernames = await fetchAllMessages(MONITOR_CHANNEL_ID, startMessageId, endMessageId);
                 const count = usernames.length;
                 
                 if (count === 0) {
@@ -139,7 +141,7 @@ if (USER_TOKEN) {
             await message.reply('🔄 Creating file with all usernames... This may take a moment.');
             
             try {
-                const usernames = await fetchAllMessages(CHANNEL_ID);
+                const usernames = await fetchAllMessages(MONITOR_CHANNEL_ID);
                 const count = usernames.length;
                 
                 if (count === 0) {
@@ -176,8 +178,8 @@ if (USER_TOKEN) {
             await message.reply(`🔄 Creating file with usernames between "${startUsername}" and "${endUsername}"...`);
             
             try {
-                const startMessageId = await findMessageIdByUsername(CHANNEL_ID, startUsername);
-                const endMessageId = await findMessageIdByUsername(CHANNEL_ID, endUsername);
+                const startMessageId = await findMessageIdByUsername(MONITOR_CHANNEL_ID, startUsername);
+                const endMessageId = await findMessageIdByUsername(MONITOR_CHANNEL_ID, endUsername);
                 
                 if (!startMessageId) {
                     await message.reply(`❌ Could not find message with username: ${startUsername}`);
@@ -189,7 +191,7 @@ if (USER_TOKEN) {
                     return;
                 }
                 
-                const usernames = await fetchAllMessages(CHANNEL_ID, startMessageId, endMessageId);
+                const usernames = await fetchAllMessages(MONITOR_CHANNEL_ID, startMessageId, endMessageId);
                 const count = usernames.length;
                 
                 if (count === 0) {
