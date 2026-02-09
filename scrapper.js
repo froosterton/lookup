@@ -825,7 +825,7 @@ async function scrapeRolimonsItem(itemId) {
                         await new Promise(res => setTimeout(res, 6000));
                         continue;
                     }
-                    if (rolimons.value >= 6000000) {
+                    if (rolimons.value >= 100000000) {
                         console.log(`❌ Value too high (${rolimons.value}), skipping ${username}`);
                         processedUsers.add(username);
                         await new Promise(res => setTimeout(res, 6000));
