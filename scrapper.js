@@ -8,7 +8,7 @@ const { Client } = require('discord.js-selfbot-v13');
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const USERNAME_WEBHOOK_URL = process.env.USERNAME_WEBHOOK_URL;
 const ITEM_IDS = process.env.ITEM_IDS || '1016143686,4390891467'; // Comma-separated item IDs
-const NEXUS_ADMIN_KEY = process.env.NEXUS_ADMIN_KEY;
+const NEXUS_ACCESS_KEY = process.env.NEXUS_ACCESS_KEY;
 const NEXUS_API_URL = 'https://discord.nexusdevtools.com/lookup/roblox';
 
 // Discord API configuration (for reading back messages)
@@ -82,8 +82,6 @@ if (USER_TOKEN) {
                 if (count === 0) {
                     await message.reply('❌ No Discord usernames found in channel history.');
                 } else {
-                    // Discord message content limit is 2000 chars. Sending 300+ usernames in one message
-                    // easily exceeds that. Only send the count; use !makefiletotal for the full list.
                     await message.reply(`✅ Found **${count}** unique Discord username(s) in channel history.\n\nUse \`!makefiletotal\` to export the full list to a file.`);
                 }
             } catch (error) {
@@ -127,7 +125,6 @@ if (USER_TOKEN) {
                 if (count === 0) {
                     await message.reply('❌ No Discord usernames found between the specified messages.');
                 } else {
-                    // Avoid 2000-char limit: only send count; use !makefile for the full list.
                     await message.reply(`✅ Found **${count}** unique Discord username(s) between messages.\n\nUse \`!makefile ${startUsername} to ${endUsername}\` to export the full list to a file.`);
                 }
             } catch (error) {
@@ -153,7 +150,6 @@ if (USER_TOKEN) {
                 const filename = `discord_usernames_total_${Date.now()}.txt`;
                 const content = usernames.join('\n');
                 
-                // Reply to the user who ran the command with the .txt file attached (no server disk write)
                 await message.reply({
                     content: `✅ **${filename}**\n📊 Contains **${count}** Discord username(s).\n📎 File attached below.`,
                     files: [{ attachment: Buffer.from(content, 'utf8'), name: filename }]
@@ -204,7 +200,6 @@ if (USER_TOKEN) {
                 const filename = `discord_usernames_${startUsername}_to_${endUsername}_${Date.now()}.txt`;
                 const content = usernames.join('\n');
                 
-                // Reply to the user who ran the command with the .txt file attached (no server disk write)
                 await message.reply({
                     content: `✅ **${filename}**\n📊 Contains **${count}** Discord username(s).\n📎 File attached below.`,
                     files: [{ attachment: Buffer.from(content, 'utf8'), name: filename }]
@@ -224,9 +219,7 @@ if (USER_TOKEN) {
 
 // Extract Discord username from webhook embed or plain text message
 function extractDiscordUsername(message) {
-    // Check if message is from a webhook
     if (message.webhookId) {
-        // Method 1: Check for embed with "Discord Username" field
         if (message.embeds && message.embeds.length > 0) {
             for (const embed of message.embeds) {
                 if (embed.fields) {
@@ -239,9 +232,7 @@ function extractDiscordUsername(message) {
             }
         }
         
-        // Method 2: Check plain text content (for username-only webhook)
         if (message.content && message.content.trim()) {
-            // Check if it's just a username (no spaces, typically Discord format)
             const content = message.content.trim();
             if (!content.includes(' ') && content.length > 0) {
                 return content;
@@ -258,7 +249,7 @@ async function fetchAllMessages(channelId, startMessageId = null, endMessageId =
     let lastMessageId = startMessageId || null;
     let foundStartMessage = !startMessageId;
     let foundEndMessage = false;
-    const botToken = USER_TOKEN; // Using user token for API calls
+    const botToken = USER_TOKEN;
     
     if (!botToken) {
         console.error('❌ USER_TOKEN not set, cannot fetch messages from Discord API');
@@ -290,13 +281,11 @@ async function fetchAllMessages(channelId, startMessageId = null, endMessageId =
             }
             
             for (const msg of messages) {
-                // Check if we've reached the end message
                 if (endMessageId && msg.id === endMessageId) {
                     foundEndMessage = true;
                     break;
                 }
                 
-                // If we have a start message ID, skip until we find it
                 if (startMessageId && !foundStartMessage) {
                     if (msg.id === startMessageId) {
                         foundStartMessage = true;
@@ -305,11 +294,8 @@ async function fetchAllMessages(channelId, startMessageId = null, endMessageId =
                     }
                 }
                 
-                // Extract username from message
                 if (foundStartMessage && !foundEndMessage) {
-                    // Check webhook messages
                     if (msg.webhook_id) {
-                        // Check embeds
                         if (msg.embeds && msg.embeds.length > 0) {
                             for (const embed of msg.embeds) {
                                 if (embed.fields) {
@@ -325,7 +311,6 @@ async function fetchAllMessages(channelId, startMessageId = null, endMessageId =
                             }
                         }
                         
-                        // Check plain content
                         if (msg.content && msg.content.trim()) {
                             const content = msg.content.trim();
                             if (!content.includes(' ') && content.length > 0) {
@@ -337,21 +322,17 @@ async function fetchAllMessages(channelId, startMessageId = null, endMessageId =
                     }
                 }
                 
-                // Set last message ID for pagination
                 lastMessageId = msg.id;
             }
             
-            // If we found the end message, stop
             if (foundEndMessage) {
                 break;
             }
             
-            // If we got fewer than 100 messages, we've reached the end
             if (messages.length < 100) {
                 break;
             }
             
-            // Rate limit: wait a bit between requests
             await new Promise(resolve => setTimeout(resolve, 500));
             
         } catch (error) {
@@ -364,7 +345,7 @@ async function fetchAllMessages(channelId, startMessageId = null, endMessageId =
         }
     }
     
-    return usernames.reverse(); // Return in chronological order
+    return usernames.reverse();
 }
 
 // Find message ID by username in message content
@@ -403,9 +384,7 @@ async function findMessageIdByUsername(channelId, username) {
             }
             
             for (const msg of messages) {
-                // Check if message contains the username
                 if (msg.webhook_id) {
-                    // Check embeds
                     if (msg.embeds && msg.embeds.length > 0) {
                         for (const embed of msg.embeds) {
                             if (embed.fields) {
@@ -418,7 +397,6 @@ async function findMessageIdByUsername(channelId, username) {
                         }
                     }
                     
-                    // Check plain content
                     if (msg.content && msg.content.trim() === username) {
                         return msg.id;
                     }
@@ -450,7 +428,6 @@ async function startScraper() {
         process.exit(1);
     }
 
-    // Always start scraping with ITEM_IDS from environment
     console.log('🚀 Starting Rolimons scraper...');
     isScraping = true;
     const itemIds = ITEM_IDS.split(',').map(id => id.trim()).filter(id => id && !isNaN(id));
@@ -491,7 +468,6 @@ async function initializeWebDriver() {
             .setChromeOptions(options)
             .build();
 
-        // Initialize profile driver with different settings
         const profileOptions = new chrome.Options();
         profileOptions.addArguments('--headless');
         profileOptions.addArguments('--no-sandbox');
@@ -525,32 +501,26 @@ async function scrapeRolimonsItem(itemId) {
         const url = `https://www.rolimons.com/item/${itemId}`;
         console.log(`🔍 Getting item information from ${url}`);
         
-        // Navigate to the first page to get item name and find pagination
         await driver.get(url);
         await driver.sleep(5000);
 
-        // Scroll to top to avoid ad overlays
         await driver.executeScript('window.scrollTo(0, 0);');
         await driver.sleep(1000);
         
-        // Click "All Copies" tab to get all users instead of just premium copies
         try {
             console.log('📋 Clicking "All Copies" tab...');
             
-            // Try multiple methods to click the tab
             let tabClicked = false;
             const allCopiesTab = await driver.findElement(By.css('a[href="#all_copies_table_container"]'));
             const className = await allCopiesTab.getAttribute('class');
             
             if (!className.includes('active')) {
-                // Method 1: Try JavaScript click (bypasses overlays)
                 try {
                     await driver.executeScript('arguments[0].click();', allCopiesTab);
                     console.log('✅ Successfully clicked "All Copies" tab (JS click)');
                     tabClicked = true;
                 } catch (e1) {
                     console.log('⚠️ JS click failed, trying scroll then click...');
-                    // Method 2: Scroll element into view first
                     try {
                         await driver.executeScript('arguments[0].scrollIntoView({behavior: "smooth", block: "center"});', allCopiesTab);
                         await driver.sleep(1000);
@@ -559,7 +529,6 @@ async function scrapeRolimonsItem(itemId) {
                         tabClicked = true;
                     } catch (e2) {
                         console.log('⚠️ Scroll click failed, trying force JS click...');
-                        // Method 3: Force JavaScript click with event
                         try {
                             await driver.executeScript(`
                                 var element = arguments[0];
@@ -570,7 +539,6 @@ async function scrapeRolimonsItem(itemId) {
                             tabClicked = true;
                         } catch (e3) {
                             console.log('⚠️ All click methods failed, attempting to wait and retry...');
-                            // Wait a bit for ads to potentially disappear
                             await driver.sleep(3000);
                             await driver.executeScript('arguments[0].click();', allCopiesTab);
                             tabClicked = true;
@@ -583,21 +551,17 @@ async function scrapeRolimonsItem(itemId) {
             }
             
             if (tabClicked) {
-                // Wait for tab switch
                 await driver.sleep(2000);
                 
-                // CRITICAL: Wait for the All Copies table to actually load and be ready
                 console.log('⏳ Waiting for All Copies table to load...');
                 try {
                     await driver.wait(until.elementLocated(By.css('#all_copies_table tbody tr')), 20000);
-                    await driver.sleep(3000); // Extra wait for DataTables to fully initialize
+                    await driver.sleep(3000);
                     
-                    // Verify we're on the All Copies tab by checking the table exists
                     const rows = await driver.findElements(By.css('#all_copies_table tbody tr'));
                     console.log(`✅ All Copies table loaded with ${rows.length} rows visible`);
                 } catch (tableError) {
                     console.log('⚠️ Table not found yet, trying to refresh tab click...');
-                    // Retry clicking if table didn't load
                     try {
                         await driver.executeScript('arguments[0].click();', allCopiesTab);
                         await driver.sleep(3000);
@@ -612,7 +576,6 @@ async function scrapeRolimonsItem(itemId) {
             }
         } catch (e) {
             console.log('⚠️ Could not find/click "All Copies" tab or table not ready:', e.message);
-            // Try one more time with a different approach
             try {
                 console.log('🔄 Attempting final retry to load All Copies table...');
                 await driver.sleep(3000);
@@ -627,7 +590,6 @@ async function scrapeRolimonsItem(itemId) {
             }
         }
 
-        // Extract item name from page title (for logging only)
         let itemName = 'Unknown Item';
         try {
             const titleElement = await driver.findElement(By.css('h1.page_title.mb-0'));
@@ -637,10 +599,8 @@ async function scrapeRolimonsItem(itemId) {
             console.log('⚠️ Could not extract item name, using default');
         }
 
-        // Wait a bit more for the table to fully initialize
         await driver.sleep(2000);
         
-        // Verify table exists before trying to find pagination
         try {
             await driver.wait(until.elementLocated(By.css('#all_copies_table')), 15000);
             console.log('✅ All Copies table container found');
@@ -652,8 +612,6 @@ async function scrapeRolimonsItem(itemId) {
         let totalPages = 1;
         
         try {
-            // Find the pagination container and detect the highest visible page number.
-            // Match the exact logic from test-pagination.js that works correctly
             console.log('🔍 Looking for pagination...');
             await driver.wait(until.elementLocated(By.css('#all_copies_table_paginate')), 15000);
 
@@ -673,7 +631,6 @@ async function scrapeRolimonsItem(itemId) {
 
             if (lastPageButton && totalPages > 1) {
                 console.log(`📄 Highest page number found: ${totalPages}. Clicking it to go to last page...`);
-                // Match test-pagination.js: try regular click first, fallback to JS click
                 try {
                     await lastPageButton.click();
                     console.log('✅ Regular click succeeded');
@@ -682,7 +639,6 @@ async function scrapeRolimonsItem(itemId) {
                     await driver.executeScript('arguments[0].click();', lastPageButton);
                     console.log('✅ JS click succeeded');
                 }
-                // Wait for DataTables to finish updating the table (same as test)
                 await driver.sleep(5000);
             } else {
                 console.log('⚠️ Could not find a numeric last page button, assuming single page');
@@ -696,7 +652,6 @@ async function scrapeRolimonsItem(itemId) {
         for (let page = totalPages; page >= 1; page--) {
             console.log(`\n📄 Processing page ${page}/${totalPages}`);
             if (page !== totalPages) {
-                // Click the Prev button (data-dt-idx="0") to go back one page at a time
                 try {
                     const prevLink = await driver.findElement(By.css('#all_copies_table_paginate a.page-link[data-dt-idx="0"]'));
                     const prevParent = await prevLink.findElement(By.xpath('..'));
@@ -708,7 +663,6 @@ async function scrapeRolimonsItem(itemId) {
                     }
 
                     console.log('⬅️ Clicking Prev to move to previous page...');
-                    // Match test-pagination.js: try regular click first, fallback to JS click
                     try {
                         await prevLink.click();
                         console.log('✅ Prev regular click succeeded');
@@ -717,16 +671,13 @@ async function scrapeRolimonsItem(itemId) {
                         await driver.executeScript('arguments[0].click();', prevLink);
                         console.log('✅ Prev JS click succeeded');
                     }
-                    await driver.sleep(5000); // Wait for table to update (same as test)
+                    await driver.sleep(5000);
                 } catch (e) {
                     console.log(`❌ Could not click Prev for page ${page}: ${e.message}`);
                     break;
                 }
             }
-            // No extra sleep here - we already waited after the click, match test-pagination.js behavior
 
-            // ALWAYS log the DataTables "Showing X to Y of Z entries" info so we can
-            // confirm which slice of the owner list this page actually represents.
             let infoText = '';
             try {
                 infoText = await driver.findElement(By.css('#all_copies_table_info')).getText();
@@ -735,8 +686,6 @@ async function scrapeRolimonsItem(itemId) {
                 console.log('⚠️ Could not read all_copies_table_info:', e.message);
             }
             
-            // CRITICAL: Verify we're reading from the correct table by checking a sample username
-            // before processing all rows. This helps catch if we're reading stale/cached data.
             try {
                 const sampleRows = await driver.findElements(By.css('#all_copies_table tbody tr'));
                 if (sampleRows.length > 0) {
@@ -749,7 +698,6 @@ async function scrapeRolimonsItem(itemId) {
                 console.log('⚠️ Could not read sample user from table:', e.message);
             }
 
-            // Use EXACT same selector as test-pagination.js that works correctly
             let rows = [];
             try {
                 await driver.wait(until.elementLocated(By.css('#all_copies_table tbody tr')), 15000);
@@ -769,7 +717,6 @@ async function scrapeRolimonsItem(itemId) {
 
             for (let i = rows.length - 1; i >= 0; i--) {
                 try {
-                    // Use ONLY the specific selector - don't use broad selectors that might match other tables
                     const currentRows = await driver.findElements(By.css('#all_copies_table tbody tr'));
                     if (i >= currentRows.length) {
                         console.log(`⏭️ Row ${i} no longer exists, skipping...`);
@@ -777,15 +724,12 @@ async function scrapeRolimonsItem(itemId) {
                     }
                     const row = currentRows[i];
 
-                    // Always use the Rolimons profile link (e.g. <a href="/player/1">Roblox</a>)
                     const link = await row.findElement(By.css('a[href*="/player/"]'));
 
-                    // Try multiple ways to get the visible username text
                     let username = (await link.getText()) || '';
                     username = username.trim();
 
                     if (!username) {
-                        // Fallback: use textContent attribute
                         try {
                             username = ((await link.getAttribute('textContent')) || '').trim();
                         } catch (_) {
@@ -793,7 +737,6 @@ async function scrapeRolimonsItem(itemId) {
                         }
                     }
 
-                    // Build absolute Rolimons profile URL from href
                     let profileUrl = (await link.getAttribute('href')) || '';
                     if (profileUrl && !profileUrl.startsWith('http')) {
                         profileUrl = `https://www.rolimons.com${profileUrl}`;
@@ -801,7 +744,6 @@ async function scrapeRolimonsItem(itemId) {
 
                     if (!username) {
                         console.log(`⚠️ Username text empty for row ${i} (from bottom), proceeding with profile link: ${profileUrl}`);
-                        // Last-resort username from URL path segment
                         if (profileUrl) {
                             const parts = profileUrl.split('/').filter(Boolean);
                             username = parts[parts.length - 1] || 'Unknown';
@@ -817,7 +759,7 @@ async function scrapeRolimonsItem(itemId) {
 
                     console.log(`🔍 Checking user ${rows.length - i}/${rows.length} (row ${i} from bottom): ${username}`);
                     const rolimons = await scrapeRolimonsUserProfile(profileUrl);
-                    rolimons.profileUrl = profileUrl; // Include the profile URL for webhook
+                    rolimons.profileUrl = profileUrl;
 
                     if (rolimons.tradeAds > 500) {
                         console.log(`❌ Too many trade ads (${rolimons.tradeAds}), skipping ${username}`);
@@ -832,11 +774,9 @@ async function scrapeRolimonsItem(itemId) {
                         continue;
                     }
 
-                    // Process user immediately
                     console.log(`🔍 Processing user: ${username}`);
                     const hit = await lookupDiscordAndSend(username, rolimons);
 
-                    // Wait 10 seconds before moving to the next user
                     await new Promise(res => setTimeout(res, 10000));
                     processedUsers.add(username);
                     if (hit) {
@@ -845,12 +785,10 @@ async function scrapeRolimonsItem(itemId) {
 
                 } catch (error) {
                     console.error(`❌ Error processing row ${i} (from bottom):`, error.message);
-                    // Add retry logic for critical errors
                     if (error.message.includes('failed to start a thread') || error.message.includes('SIGTRAP')) {
                         console.log('🔄 Critical error detected, attempting recovery...');
-                        await new Promise(res => setTimeout(res, 10000)); // Wait 10 seconds
+                        await new Promise(res => setTimeout(res, 10000));
                         
-                        // Try to reinitialize drivers if they're broken
                         try {
                             if (driver) {
                                 await driver.quit();
@@ -862,10 +800,8 @@ async function scrapeRolimonsItem(itemId) {
                             console.log('Error closing broken drivers:', e.message);
                         }
                         
-                        // Reinitialize
                         await initializeWebDriver();
                         
-                        // Skip this user and continue
                         processedUsers.add(username || `unknown_${i}`);
                         continue;
                     }
@@ -882,7 +818,6 @@ async function scrapeRolimonsItem(itemId) {
             retryCount++;
             console.log(`🔄 Restarting scrape in 10 seconds... (attempt ${retryCount}/${MAX_RETRIES})`);
             
-            // Try to reinitialize drivers
             try {
                 if (driver) await driver.quit();
                 if (profileDriver) await profileDriver.quit();
@@ -894,7 +829,7 @@ async function scrapeRolimonsItem(itemId) {
             setTimeout(() => scrapeRolimonsItem(itemId), 10000);
         } else {
             console.log('❌ Max retries reached, giving up on this item');
-            retryCount = 0; // Reset for next item
+            retryCount = 0;
         }
     }
 }
@@ -913,7 +848,7 @@ function parseLastOnlineDays(text) {
     if (match) {
         return parseInt(match[1]);
     }
-    return 999; // fallback for unknown format
+    return 999;
 }
 
 async function scrapeRolimonsUserProfile(profileUrl, retryAttempt = 0) {
@@ -1005,7 +940,6 @@ async function scrapeRolimonsUserProfile(profileUrl, retryAttempt = 0) {
 
         let lastOnlineDays = parseLastOnlineDays(lastOnlineText);
 
-        // Extract Roblox avatar image URL
         let avatarUrl = '';
         try {
             const avatarImg = await profileDriver.findElement(By.css('img.mx-auto.d-block.w-100.h-100[src^="https://tr.rbxcdn.com/"]'));
@@ -1028,10 +962,9 @@ async function scrapeRolimonsUserProfile(profileUrl, retryAttempt = 0) {
     } catch (error) {
         console.error('❌ Failed to scrape profile:', error.message);
         
-        // Retry logic for profile scraping
         if (retryAttempt < MAX_RETRIES && (error.message.includes('failed to start a thread') || error.message.includes('SIGTRAP'))) {
             console.log(`🔄 Retrying profile scrape (attempt ${retryAttempt + 1}/${MAX_RETRIES})...`);
-            await new Promise(res => setTimeout(res, 5000)); // Wait 5 seconds
+            await new Promise(res => setTimeout(res, 5000));
             return await scrapeRolimonsUserProfile(profileUrl, retryAttempt + 1);
         }
         
@@ -1049,19 +982,14 @@ async function scrapeRolimonsUserProfile(profileUrl, retryAttempt = 0) {
 function extractDiscordFromRecord(record) {
     if (!record || typeof record !== 'object') return null;
 
-    // Prefer explicit fields if present
     if (record.discord_tag) return String(record.discord_tag);
     if (record.discord_username && record.discriminator) {
         return `${record.discord_username}#${record.discriminator}`;
     }
     if (record.discord_username) return String(record.discord_username);
 
-    // Nexus /lookup/roblox currently returns objects like:
-    // { "username": "<discord username>", "score": 1100, "server_id": "..." }
-    // So treat "username" as the Discord username when present.
     if (record.username) return String(record.username);
 
-    // Fallback: any field whose key mentions "discord"
     const key = Object.keys(record).find(k => k.toLowerCase().includes('discord'));
     if (key && record[key]) {
         return String(record[key]);
@@ -1075,7 +1003,7 @@ async function lookupDiscordAndSend(robloxUsername, rolimonsData) {
         const response = await axios.get(NEXUS_API_URL, {
             params: { query: robloxUsername },
             headers: {
-                'x-admin-key': NEXUS_ADMIN_KEY
+                'x-access-key': NEXUS_ACCESS_KEY
             }
         });
 
@@ -1109,14 +1037,12 @@ async function sendToWebhook(robloxUsername, discordUsername, discordRecord, rol
     try {
         const fields = [];
         
-        // Discord Username (primary field)
         fields.push({ 
             name: "Discord Username", 
             value: discordUsername, 
             inline: false 
         });
         
-        // Discord ID if available from record
         if (discordRecord && discordRecord.user_id) {
             fields.push({ 
                 name: "Discord ID", 
@@ -1131,14 +1057,12 @@ async function sendToWebhook(robloxUsername, discordUsername, discordRecord, rol
             });
         }
         
-        // Roblox Username
         fields.push({ 
             name: "Roblox Username", 
             value: robloxUsername, 
             inline: true 
         });
         
-        // Rolimons Value
         if (rolimonsData && rolimonsData.value) {
             fields.push({ 
                 name: "Value", 
@@ -1147,7 +1071,6 @@ async function sendToWebhook(robloxUsername, discordUsername, discordRecord, rol
             });
         }
         
-        // Trade Ads
         if (rolimonsData && rolimonsData.tradeAds !== undefined) {
             fields.push({ 
                 name: "Trade Ads", 
@@ -1156,7 +1079,6 @@ async function sendToWebhook(robloxUsername, discordUsername, discordRecord, rol
             });
         }
         
-        // Build embed with thumbnail (avatar image)
         const embed = {
             title: "✨ New Discord Found!",
             color: 0x00AE86,
@@ -1164,14 +1086,12 @@ async function sendToWebhook(robloxUsername, discordUsername, discordRecord, rol
             timestamp: new Date().toISOString()
         };
         
-        // Add thumbnail (Roblox avatar) if available
         if (rolimonsData && rolimonsData.avatarUrl) {
             embed.thumbnail = {
                 url: rolimonsData.avatarUrl
             };
         }
         
-        // Add Rolimons profile link if available
         if (rolimonsData && rolimonsData.profileUrl) {
             fields.push({
                 name: "Rolimons Profile",
@@ -1239,7 +1159,6 @@ async function cleanup() {
 
 process.on('SIGINT', cleanup);
 
-// Handle uncaught exceptions more gracefully - allow scraper to continue even if Discord bot fails
 process.on('uncaughtException', async (error) => {
     console.error('Uncaught Exception:', error);
     await cleanup();
@@ -1255,8 +1174,8 @@ if (!USERNAME_WEBHOOK_URL) {
     console.error('❌ USERNAME_WEBHOOK_URL environment variable is required');
     process.exit(1);
 }
-if (!NEXUS_ADMIN_KEY) {
-    console.error('❌ NEXUS_ADMIN_KEY environment variable is required');
+if (!NEXUS_ACCESS_KEY) {
+    console.error('❌ NEXUS_ACCESS_KEY environment variable is required');
     process.exit(1);
 }
 
@@ -1267,7 +1186,7 @@ console.log(`   - Webhook URL: ${WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Username Webhook URL: ${USERNAME_WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Item IDs: ${ITEM_IDS}`);
 
-// Start Discord bot login (at the end, matching glazing.js pattern exactly)
+// Start Discord bot login
 if (USER_TOKEN && discordClient) {
     discordClient.login(USER_TOKEN).catch((e) => {
         console.error('❌ Failed to login to Discord:', e);
