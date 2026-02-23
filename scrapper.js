@@ -7,27 +7,28 @@ const { Client } = require('discord.js-selfbot-v13');
 // Configuration - Railway deployment ready
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const USERNAME_WEBHOOK_URL = process.env.USERNAME_WEBHOOK_URL;
-const ITEM_IDS = process.env.ITEM_IDS || '1016143686,4390891467'; // Comma-separated item IDs
+const ITEM_IDS = process.env.ITEM_IDS || '1016143686,4390891467';
 const NEXUS_ACCESS_KEY = process.env.NEXUS_ACCESS_KEY;
 const NEXUS_API_URL = 'https://discord.nexusdevtools.com/lookup/roblox';
 
-// Discord API configuration (for reading back messages)
+// Discord API configuration
 const USER_TOKEN = process.env.USER_TOKEN;
 const GUILD_ID = process.env.GUILD_ID || '1423783454297817162';
-const COMMAND_CHANNEL_ID = process.env.COMMAND_CHANNEL_ID || '1462274235958562827'; // Channel where commands are sent
-const MONITOR_CHANNEL_ID = process.env.MONITOR_CHANNEL_ID || '1462245649834577952'; // Channel where webhook messages with usernames are sent
+const COMMAND_CHANNEL_ID = process.env.COMMAND_CHANNEL_ID || '1462274235958562827';
+const MONITOR_CHANNEL_ID = process.env.MONITOR_CHANNEL_ID || '1462245649834577952';
 
 // Express server for healthcheck
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-let driver; // Global Selenium WebDriver instance
-let profileDriver; // Dedicated driver for profile scraping
+let driver;
+let profileDriver;
 let processedUsers = new Set();
 let totalLogged = 0;
 let isScraping = false;
 let retryCount = 0;
 const MAX_RETRIES = 3;
+let profileScrapeCount = 0;
 
 // Healthcheck endpoint
 app.get('/', (req, res) => {
@@ -39,7 +40,6 @@ app.get('/', (req, res) => {
     });
 });
 
-// Start Express server
 app.listen(PORT, () => {
     console.log(`🌐 Healthcheck server running on port ${PORT}`);
 });
@@ -58,19 +58,16 @@ if (USER_TOKEN) {
     });
 
     discordClient.on('messageCreate', async (message) => {
-        // Only listen to commands from the command channel
         if (message.channel.id !== COMMAND_CHANNEL_ID) {
             return;
         }
         
-        // Only respond to commands starting with !
         if (!message.content.startsWith('!')) {
             return;
         }
         
         const command = message.content.trim();
         
-        // Command: !total
         if (command === '!total') {
             console.log('📊 Processing !total command...');
             await message.reply('🔄 Fetching all usernames from channel history... This may take a moment.');
@@ -90,7 +87,6 @@ if (USER_TOKEN) {
             }
         }
         
-        // Command: !totalfrom (username) to (username)
         else if (command.startsWith('!totalfrom')) {
             console.log('📊 Processing !totalfrom command...');
             const match = command.match(/^!totalfrom\s+(.+?)\s+to\s+(.+)$/);
@@ -133,7 +129,6 @@ if (USER_TOKEN) {
             }
         }
         
-        // Command: !makefiletotal
         else if (command === '!makefiletotal') {
             console.log('📝 Processing !makefiletotal command...');
             await message.reply('🔄 Creating file with all usernames... This may take a moment.');
@@ -160,7 +155,6 @@ if (USER_TOKEN) {
             }
         }
         
-        // Command: !makefile (username) to (username)
         else if (command.startsWith('!makefile')) {
             console.log('📝 Processing !makefile command...');
             const match = command.match(/^!makefile\s+(.+?)\s+to\s+(.+)$/);
@@ -217,7 +211,6 @@ if (USER_TOKEN) {
     console.log('💡 Set USER_TOKEN environment variable to enable Discord command features.');
 }
 
-// Extract Discord username from webhook embed or plain text message
 function extractDiscordUsername(message) {
     if (message.webhookId) {
         if (message.embeds && message.embeds.length > 0) {
@@ -243,7 +236,6 @@ function extractDiscordUsername(message) {
     return null;
 }
 
-// Fetch all messages from channel using Discord API
 async function fetchAllMessages(channelId, startMessageId = null, endMessageId = null) {
     const usernames = [];
     let lastMessageId = startMessageId || null;
@@ -348,7 +340,6 @@ async function fetchAllMessages(channelId, startMessageId = null, endMessageId =
     return usernames.reverse();
 }
 
-// Find message ID by username in message content
 async function findMessageIdByUsername(channelId, username) {
     const botToken = USER_TOKEN;
     
@@ -420,6 +411,24 @@ async function findMessageIdByUsername(channelId, username) {
     return null;
 }
 
+function getProfileDriverOptions() {
+    const options = new chrome.Options();
+    options.addArguments('--headless');
+    options.addArguments('--no-sandbox');
+    options.addArguments('--disable-dev-shm-usage');
+    options.addArguments('--disable-gpu');
+    options.addArguments('--window-size=1920,1080');
+    options.addArguments('--disable-web-security');
+    options.addArguments('--disable-features=VizDisplayCompositor');
+    options.addArguments('--disable-extensions');
+    options.addArguments('--disable-plugins');
+    options.addArguments('--disable-images');
+    options.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    options.addArguments('--disable-blink-features=AutomationControlled');
+    options.addArguments('--exclude-switches=enable-automation');
+    return options;
+}
+
 async function startScraper() {
     console.log('🔐 Initializing scraper...');
     const initialized = await initializeWebDriver();
@@ -448,40 +457,14 @@ async function initializeWebDriver() {
     try {
         console.log('🔧 Initializing Selenium WebDriver...');
 
-        const options = new chrome.Options();
-        options.addArguments('--headless');
-        options.addArguments('--no-sandbox');
-        options.addArguments('--disable-dev-shm-usage');
-        options.addArguments('--disable-gpu');
-        options.addArguments('--window-size=1920,1080');
-        options.addArguments('--disable-web-security');
-        options.addArguments('--disable-features=VizDisplayCompositor');
-        options.addArguments('--disable-extensions');
-        options.addArguments('--disable-plugins');
-        options.addArguments('--disable-images');
-        options.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        options.addArguments('--disable-blink-features=AutomationControlled');
-        options.addArguments('--exclude-switches=enable-automation');
+        const options = getProfileDriverOptions();
 
         driver = await new Builder()
             .forBrowser('chrome')
             .setChromeOptions(options)
             .build();
 
-        const profileOptions = new chrome.Options();
-        profileOptions.addArguments('--headless');
-        profileOptions.addArguments('--no-sandbox');
-        profileOptions.addArguments('--disable-dev-shm-usage');
-        profileOptions.addArguments('--disable-gpu');
-        profileOptions.addArguments('--window-size=1920,1080');
-        profileOptions.addArguments('--disable-web-security');
-        profileOptions.addArguments('--disable-features=VizDisplayCompositor');
-        profileOptions.addArguments('--disable-extensions');
-        profileOptions.addArguments('--disable-plugins');
-        profileOptions.addArguments('--disable-images');
-        profileOptions.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        profileOptions.addArguments('--disable-blink-features=AutomationControlled');
-        profileOptions.addArguments('--exclude-switches=enable-automation');
+        const profileOptions = getProfileDriverOptions();
 
         profileDriver = await new Builder()
             .forBrowser('chrome')
@@ -493,6 +476,28 @@ async function initializeWebDriver() {
     } catch (error) {
         console.error('❌ WebDriver initialization error:', error.message);
         return false;
+    }
+}
+
+async function recycleProfileDriver() {
+    console.log('🔄 Recycling profile driver to prevent memory/timeout issues...');
+    try {
+        if (profileDriver) {
+            await profileDriver.quit();
+        }
+    } catch (e) {
+        console.log('⚠️ Error closing old profile driver:', e.message);
+    }
+
+    try {
+        const options = getProfileDriverOptions();
+        profileDriver = await new Builder()
+            .forBrowser('chrome')
+            .setChromeOptions(options)
+            .build();
+        console.log('✅ Profile driver recycled successfully');
+    } catch (e) {
+        console.error('❌ Failed to recycle profile driver:', e.message);
     }
 }
 
@@ -690,9 +695,13 @@ async function scrapeRolimonsItem(itemId) {
                 const sampleRows = await driver.findElements(By.css('#all_copies_table tbody tr'));
                 if (sampleRows.length > 0) {
                     const firstRow = sampleRows[0];
-                    const sampleLink = await firstRow.findElement(By.css('a[href*="/player/"]'));
-                    const sampleUsername = await sampleLink.getText();
-                    console.log(`🔍 Sample user on this page (first row): "${sampleUsername}"`);
+                    try {
+                        const sampleLink = await firstRow.findElement(By.css('a[href*="/player/"]'));
+                        const sampleUsername = await sampleLink.getText();
+                        console.log(`🔍 Sample user on this page (first row): "${sampleUsername}"`);
+                    } catch (e) {
+                        console.log('⚠️ First row has no player link');
+                    }
                 }
             } catch (e) {
                 console.log('⚠️ Could not read sample user from table:', e.message);
@@ -724,7 +733,14 @@ async function scrapeRolimonsItem(itemId) {
                     }
                     const row = currentRows[i];
 
-                    const link = await row.findElement(By.css('a[href*="/player/"]'));
+                    // Guard: skip rows that have no player link
+                    let link;
+                    try {
+                        link = await row.findElement(By.css('a[href*="/player/"]'));
+                    } catch (e) {
+                        console.log(`⏭️ Row ${i} has no player link, skipping...`);
+                        continue;
+                    }
 
                     let username = (await link.getText()) || '';
                     username = username.trim();
@@ -864,6 +880,12 @@ async function scrapeRolimonsUserProfile(profileUrl, retryAttempt = 0) {
         };
     }
 
+    // Recycle the profile driver every 20 scrapes to prevent memory leaks and timeouts
+    profileScrapeCount++;
+    if (profileScrapeCount % 20 === 0) {
+        await recycleProfileDriver();
+    }
+
     try {
         await profileDriver.get(profileUrl);
         await profileDriver.sleep(2000);
@@ -962,8 +984,9 @@ async function scrapeRolimonsUserProfile(profileUrl, retryAttempt = 0) {
     } catch (error) {
         console.error('❌ Failed to scrape profile:', error.message);
         
-        if (retryAttempt < MAX_RETRIES && (error.message.includes('failed to start a thread') || error.message.includes('SIGTRAP'))) {
+        if (retryAttempt < MAX_RETRIES && (error.message.includes('failed to start a thread') || error.message.includes('SIGTRAP') || error.message.includes('timeout'))) {
             console.log(`🔄 Retrying profile scrape (attempt ${retryAttempt + 1}/${MAX_RETRIES})...`);
+            await recycleProfileDriver();
             await new Promise(res => setTimeout(res, 5000));
             return await scrapeRolimonsUserProfile(profileUrl, retryAttempt + 1);
         }
@@ -998,7 +1021,7 @@ function extractDiscordFromRecord(record) {
     return null;
 }
 
-async function lookupDiscordAndSend(robloxUsername, rolimonsData) {
+async function lookupDiscordAndSend(robloxUsername, rolimonsData, attempt = 0) {
     try {
         const response = await axios.get(NEXUS_API_URL, {
             params: { query: robloxUsername },
@@ -1027,6 +1050,15 @@ async function lookupDiscordAndSend(robloxUsername, rolimonsData) {
         await sendUsernameOnlyToWebhook(discordValue);
         return true;
     } catch (error) {
+        // Retry on 429 (rate limit) with exponential backoff
+        if (error.response && error.response.status === 429 && attempt < 5) {
+            const retryAfterHeader = error.response.headers['retry-after'];
+            const backoffSeconds = retryAfterHeader ? parseInt(retryAfterHeader) : (30 * (attempt + 1));
+            const waitMs = backoffSeconds * 1000;
+            console.log(`⏳ Rate limited (429) for ${robloxUsername}. Retrying in ${backoffSeconds}s (attempt ${attempt + 1}/5)...`);
+            await new Promise(res => setTimeout(res, waitMs));
+            return lookupDiscordAndSend(robloxUsername, rolimonsData, attempt + 1);
+        }
         console.error(`❌ Nexus API error for ${robloxUsername}:`, error.message);
         return false;
     }
@@ -1165,7 +1197,6 @@ process.on('uncaughtException', async (error) => {
 });
 process.on('unhandledRejection', (e) => console.error('❌ Unhandled promise rejection:', e));
 
-// Validate required environment variables
 if (!WEBHOOK_URL) {
     console.error('❌ WEBHOOK_URL environment variable is required');
     process.exit(1);
@@ -1179,14 +1210,12 @@ if (!NEXUS_ACCESS_KEY) {
     process.exit(1);
 }
 
-// Railway deployment logging
 console.log('🚀 Starting Railway deployment...');
 console.log('📋 Configuration:');
 console.log(`   - Webhook URL: ${WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Username Webhook URL: ${USERNAME_WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Item IDs: ${ITEM_IDS}`);
 
-// Start Discord bot login
 if (USER_TOKEN && discordClient) {
     discordClient.login(USER_TOKEN).catch((e) => {
         console.error('❌ Failed to login to Discord:', e);
